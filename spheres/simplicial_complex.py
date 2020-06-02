@@ -36,10 +36,14 @@ def change_orientation(self: Union[sg.Simplex, List]):
     s = self.copy() if isinstance(self, list) else list(self)
     if len(s) >= 2:
         s = s[:-2] + s[-2:][::-1]
-    if isinstance(self, list):
-        return s
-    else:
-        return sg.Simplex(s)
+    if isinstance(self, sg.Simplex):
+        s = sg.Simplex(s)
+        if s.dimension() == 0:
+            if hasattr(self, 'orientation'):
+                s.orientation = self.orientation * -1
+            else:
+                s.orientation = -1
+    return s
 
 
 basic_is_isomorphic = sg.SimplicialComplex.is_isomorphic
@@ -55,16 +59,26 @@ def is_isomorphic(self, other, certificate=False):
         return basic_is_isomorphic(self, other, certificate)
 
 
+def decorate_init(base_init):
+    def new_init(self, *args, **kwargs):
+        base_init(self, *args, **kwargs)
+        self.orientation = 1
+
+    return new_init
+
+
 sg.SimplicialComplex.is_homology_sphere = is_homology_sphere
 sg.SimplicialComplex.rename_vertices = rename_vertices
 sg.SimplicialComplex.as_sphere = as_sphere
 sg.SimplicialComplex.is_isomorphic = is_isomorphic  # that is due to bug in sage
 
 sg.Simplex.change_orientation = change_orientation
+sg.Simplex.__init__ = decorate_init(sg.Simplex.__init__)  # now sg.Simplex has orientation property
 
 
 class Sphere(sg.SimplicialComplex):
     def __init__(self, data: Union[Iterable[List], sg.SimplicialComplex], **kwargs):
+        self.__class__.meta_d = self.__class__
         if isinstance(data, sg.SimplicialComplex):
             data = data.facets()
 
@@ -98,6 +112,15 @@ class Sphere(sg.SimplicialComplex):
             else:
                 res = res[0], oriented
         return res
+
+    def is_minus_self(self):
+        """Checks if a sphere has automorphism changing the orientation."""
+        gr = self.automorphism_group()
+        for gen in gr.gens():
+            subst = gen.dict()
+            if not self.check_oriented_facet([subst[v] for v in list(self.facets_with_orientation[0])]):
+                return True
+        return False
 
     def is_valid(self) -> bool:
         if not self.is_homology_sphere():
@@ -149,11 +172,26 @@ class Sphere(sg.SimplicialComplex):
         res = set()
         for s in facets:
             s = list(s)
-            if len(s) <= 1 or self.check_oriented_facet(sg.Simplex(s + v)):
+            if self.check_oriented_facet(sg.Simplex(s + v)):
                 res.add(sg.Simplex(s))
             else:
                 res.add(sg.Simplex(s).change_orientation())
         return res
+
+    def barycentric_subdivision(self):
+        """Makes a barycentric subdivided sphere with induced orientation."""
+        if self.dimension() < 1:
+            raise ValueError('For barycentric subdivision a sphere has to be of positive dimension.')
+        res = super(Sphere, self).barycentric_subdivision()
+        facets = list(res.facets())
+        flag = sorted([list(v) for v in facets[0]], key=len)
+        vertices = flag[0] + [(set(flag[i]) - set(flag[i - 1])).pop() for i in range(1, len(flag))]
+        facets[0] = sg.Simplex([tuple(sorted(vertices[:i + 1])) for i in range(len(vertices))])
+        if not self.check_oriented_facet(vertices):
+            facets[0] = list(facets[0])
+            facets[0][0], facets[0][1] = facets[0][1], facets[0][0]
+            facets[0] = sg.Simplex(facets[0])
+        return Sphere(facets)
 
     def check_oriented_facet(self, f: Union[List, sg.Simplex]) -> bool:
         if not isinstance(f, sg.Simplex):
@@ -172,6 +210,9 @@ class Sphere(sg.SimplicialComplex):
         raise NotImplemented
 
 
+Sphere.meta_d = Sphere
+
+
 class BistellarMove(sg.SimplicialComplex):
     def __init__(self, sphere: Sphere, sigma: List, new_vertex_name=None):
         s = sphere.__copy__().as_sphere().facets_with_orientation
@@ -183,12 +224,12 @@ class BistellarMove(sg.SimplicialComplex):
         self.dim = self.dimension()  # dimension of a sphere
         self.sigma = sigma
 
-        self.s = s
-
         v = list(self.star(sigma).vertices())
         if len(v) == self.dimension() + 2:
             pass
         elif len(v) == self.dimension() + 1 == len(sigma) and len(self.vertices()) > self.dimension() + 1:
+            if new_vertex_name in self.vertices():
+                raise ValueError('Vertex with this name is already in a complex.')
             v.append(new_vertex_name)
         else:
             raise ValueError('Cannot apply bistellar move!')
@@ -197,25 +238,28 @@ class BistellarMove(sg.SimplicialComplex):
 
         self.add_face(v)
 
-        self.t = set(self.s).copy()
+        t = set(s).copy()
         sim = sg.SimplicialComplex([v])
         sim.remove_face(v)
-        facet = [facet for facet in self.s if facet in sim.facets()][0]
+        facet = [facet for facet in s if facet in sim.facets()][0]
         sim = sim.as_sphere().orient(oriented_facet=facet)
 
         for facet in sim:
-            if facet in self.t:
-                self.t.remove(facet)
+            if facet in t:
+                t.remove(facet)
             else:
-                self.t.update({facet.change_orientation()})
+                t.update({facet.change_orientation()})
+
+        self.s = Sphere(s)
+        self.t = Sphere(t)
 
     def is_isomorphic(self, other, certificate=False):
-        c_self = Sphere(self.s).cone()\
+        c_self = self.s.cone()\
             .rename_vertices({'R0': '__new_vertex__'})\
             .rename_vertices({'L' + str(v): v for v in self.vertices()})
         r_self = sg.SimplicialComplex(self.facets() + c_self.facets())
 
-        c_other = Sphere(other.s).cone()\
+        c_other = other.s.cone()\
             .rename_vertices({'R0': '__new_vertex__'})\
             .rename_vertices({'L' + str(v): v for v in other.vertices()})
         r_other = sg.SimplicialComplex(other.facets() + c_other.facets())
@@ -231,16 +275,31 @@ class BistellarMove(sg.SimplicialComplex):
 
     def inverse(self):
         new_vertex_name = self.sigma[0] if len(self.sigma) == 1 else None
-        return BistellarMove(Sphere(self.t), self.tau, new_vertex_name=new_vertex_name)
+        return BistellarMove(self.t, self.tau, new_vertex_name=new_vertex_name)
 
     def link(self, simplex, is_mutable=True):
-        res = Sphere(self.s).link_oriented(simplex)
+        if not set(simplex).issubset(set(self.sigma)):
+            raise ValueError('Invalid simplex for link of bistellar move.')
+        res = self.s.link_oriented(simplex)
         sigma = list(set(self.sigma) - set(simplex))
-        new_vertex_name = self.sigma[0] if len(self.sigma) == 1 else None
+        new_vertex_name = self.tau[0] if len(self.tau) == 1 else None
         return BistellarMove(Sphere(res), sigma, new_vertex_name)
 
     def delta(self):
         return Chain(Sphere, [(1, self.t), (-1, self.s)])
+
+    def skew_suspension(self, new_vertices_names=None) -> Sphere:
+        if new_vertices_names is None:
+            max_vertex = max([i for i in self.vertices() if isinstance(i, int)])
+            new_vertices_names = max_vertex + 1, max_vertex + 2
+        a, b = new_vertices_names
+        if a in self.vertices() or b in self.vertices():
+            raise ValueError('Vertex with this name is already in a complex.')
+
+        s_facets = [change_orientation(list(f) + [a]) for f in self.s.facets_with_orientation]
+        t_facets = [list(f) + [b] for f in self.t.facets_with_orientation]
+        extra_facet = self.sigma + self.tau  # not oriented!
+        return Sphere(s_facets + t_facets + [extra_facet])
 
 
 class Chain:
@@ -256,7 +315,7 @@ class Chain:
         for i, (c1, q1) in enumerate(self.data):
             found = False
             for j, (c2, q2) in enumerate(res):
-                iso, subst, orientation = q1.is_isomorphic(q2, certificate=True, with_multiple=True)
+                iso, orientation = q1.is_isomorphic(q2, certificate=False, with_multiple=True)
                 if iso:
                     found = True
                     res[j] = c2 + c1 * orientation, q2
@@ -265,6 +324,17 @@ class Chain:
                     break
             if not found:
                 res.append((c1, q1))
+        self.data = res
+        res = []
+        for c, q in self.data:
+            if q.is_minus_self():
+                if self.ring.characteristic() == 2:
+                    res.append((c, q))
+                elif self.ring.characteristic() == 0:
+                    if self.ring == sg.ZZ and c % 2:
+                        res.append((c % 2, q))
+            else:
+                res.append((c, q))
         self.data = res
 
     def __add__(self, other):
@@ -297,20 +367,3 @@ class Chain:
         if not all(c == self.ring(c) for (c, _) in self.data):
             raise ValueError('Unknown coefficients!')
         return True
-
-
-# class SimplicialChain(Chain):
-#     base_complex
-#     def is_valid(self)
-#     def d(self)
-#
-#
-# class Subcomplex(SimplicialComplex):
-#     base_complex
-#     def barycentric_subdivision(self)
-#     def is_valid(self)
-
-
-# def to_base_cycles(chain_in_bistellar_moves: Chain)
-#
-# def link_coefficient(a: Subcomplex, b: Subcomplex)

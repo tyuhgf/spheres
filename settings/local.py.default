@@ -1,0 +1,1 @@
+gap_path = None  # your absolute path to gap.sh (or gap.exe)

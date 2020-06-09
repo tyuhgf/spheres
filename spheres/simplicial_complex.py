@@ -1,7 +1,12 @@
+import json
+import os
 import re
 from typing import List, Union, Set, Iterable, Tuple
 
 from sage import all as sg
+
+from settings import TMP_DIR
+from spheres.gap_executor import gap_execute_commands
 
 
 def is_homology_sphere(self: sg.SimplicialComplex):
@@ -92,7 +97,7 @@ class Sphere(sg.SimplicialComplex):
 
         self.facets_with_orientation = self.orient(list(data)[0])
 
-    def rename_vertices(self, subst='int'):
+    def rename_vertices(self, subst: Union[str, dict, callable] = 'int'):
         return super(Sphere, self).rename_vertices(subst).as_sphere()
 
     def is_isomorphic(self, other, certificate=False, with_multiple: bool = False):
@@ -205,9 +210,46 @@ class Sphere(sg.SimplicialComplex):
             return True
         return False
 
-    def path_to_simplex(self):
-        # todo
-        raise NotImplemented
+    def path_to_simplex(self, timeout=3):
+        vertices_dict = {b: a+1 for (a, b) in enumerate(self.vertices())}
+        s = self.rename_vertices(vertices_dict)
+
+        facets = [list(f) for f in s.facets_with_orientation]
+
+        log_file, out_file = f'{TMP_DIR}/BISTELLAR.log', f'{TMP_DIR}/BISTELLAR.out'
+
+        try:
+            os.remove(log_file)
+        except FileNotFoundError:
+            pass
+        try:
+            os.remove(out_file)
+        except FileNotFoundError:
+            pass
+
+        try:
+            status = gap_execute_commands([f'log_file := String("{log_file}");',
+                                           f'out_file := String("{out_file}");',
+                                           f'type_of_object := 1;',
+                                           f'facets := {facets};',
+                                           (f'Read("spheres/BISTELLAR_src.gap");', timeout)])
+        except Exception as e:
+            raise e
+        if not status[-1] == ([b'The examined complex is a sphere!!!\ngap> '], 'ok', {}):
+            raise Exception(f'Gap returned {status[-1]}')
+
+        moves = json.load(open(log_file))
+        bm = []
+        sphere = s
+        for move in moves[:-1]:
+            if len(move[1]) == 1:
+                v = move[1][0]
+            else:
+                v = None
+            bm.append(BistellarMove(sphere, move[0], new_vertex_name=v))
+            sphere = bm[-1].t
+
+        return bm
 
 
 Sphere.meta_d = Sphere

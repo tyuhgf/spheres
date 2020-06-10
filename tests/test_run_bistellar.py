@@ -32,18 +32,11 @@ def test_bistellar(timeout, result):
     """The test on BISTELLAR execution. 3 seconds is not enough, but 120 seconds is enough."""
     log_file, out_file, in_file = f'{TMP_DIR}/BISTELLAR.log', f'{TMP_DIR}/BISTELLAR.out', f'{TMP_DIR}/BISTELLAR.in'
 
-    try:
-        os.remove(log_file)
-    except FileNotFoundError:
-        pass
-    try:
-        os.remove(out_file)
-    except FileNotFoundError:
-        pass
-    try:
-        os.remove(in_file)
-    except FileNotFoundError:
-        pass
+    for f in (log_file, out_file, in_file):
+        try:
+            os.remove(f)
+        except FileNotFoundError:
+            pass
 
     bistellar_path = os.path.join(os.path.dirname(__file__), '../spheres/BISTELLAR.gap')
 

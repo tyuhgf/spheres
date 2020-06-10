@@ -1,1 +1,5 @@
+# default values of local settings
+# please create local.py file with your local settings
+
+
 gap_path = None  # your absolute path to gap.sh (or gap.exe)

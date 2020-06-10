@@ -7,19 +7,34 @@ class Communicator:
         self.counter = 0
         self.process = process
 
-        self.answers = []
+        self.answers = ''
         self.questions = []
         self._step = .3
 
         self.listener = None
+
+    async def process_errors(self):
+        while True:
+            try:
+                if self.process.returncode is not None:
+                    break
+                line = await asyncio.wait_for(self.process.stderr.read(200), 1)
+                line = line.decode(errors='ignore')
+                if line:
+                    print('GAP ERROR > ', line)
+                    self.listener.error(line)
+            except asyncio.TimeoutError:
+                pass
+        pass
 
     async def process_answers(self):
         while True:
             try:
                 if self.process.returncode is not None:
                     break
-                line = await asyncio.wait_for(self.process.stdout.read(100), 1)
-                self.answers.append(line)  # todo deal with answers of arbitrary len
+                line = await asyncio.wait_for(self.process.stdout.read(200), 1)
+                line = line.decode(errors='ignore')
+                self.answers += line
                 if self.listener is not None:
                     self.listener(line)
             except asyncio.TimeoutError:
@@ -38,7 +53,10 @@ class Communicator:
         for _ in range(int(timeout // self._step + 1)):
             await asyncio.sleep(self._step)
             if self.listener is not None and self.listener.complete:
-                return self.answers[n_answers:], 'ok', {}
+                res = self.answers[n_answers:].split('gap> ')
+                if res[-1] == '':
+                    res = res[:-1]
+                return res, 'ok', {}
         return self.answers[n_answers:], 'ok', {'timeout': True}
 
 
@@ -49,18 +67,21 @@ class Listener:
     def __call__(self, _line):
         self.complete = True
 
+    def error(self, _line):
+        self.complete = True
+
 
 class ListenerNLines(Listener):
     def __init__(self, n=1):
         super(ListenerNLines, self).__init__()
         self.n = n
-        self.counter = 0
         if n == 0:
             self.complete = True
+        self.answers = ''
 
-    def __call__(self, _line):
-        self.counter += 1
-        if self.counter >= self.n:
+    def __call__(self, line):
+        self.answers += line
+        if self.answers.count('gap> ') >= self.n:
             self.complete = True
 
 
@@ -79,14 +100,15 @@ async def execute_series(requests: list):
     c = Communicator(p)
 
     loop.create_task(c.process_answers())
+    loop.create_task(c.process_errors())
     await asyncio.sleep(5)  # to start gap system
 
     answers = []
     for req in requests:
         if isinstance(req, str):
-            ans = await loop.create_task(c.request(req, listener=Listener()))
+            ans = await loop.create_task(c.request(req, listener=ListenerNLines()))
         elif isinstance(req, tuple):
-            ans = await loop.create_task(c.request(*req, listener=Listener()))
+            ans = await loop.create_task(c.request(*req, listener=ListenerNLines()))
         elif isinstance(req, dict):
             ans = await loop.create_task(c.request(**req))
         else:

@@ -336,7 +336,8 @@ FacetsTofvector := function()
       Print("dim = ",dim,"\n\n");
       AppendTo(log_file,"dim = ",dim,"\n\n");
    elif verbose =9 then
-      AppendTo(log_file,"[\n");
+      AppendTo(log_file, "[\n");
+      AppendTo(in_file, facets);
    fi;
 
    ## Computing all faces ##

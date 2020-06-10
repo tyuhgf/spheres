@@ -211,12 +211,14 @@ class Sphere(sg.SimplicialComplex):
         return False
 
     def path_to_simplex(self, timeout=3):
+        """Returns list of BistellarMove objects representing the path to trivial sphere."""
         vertices_dict = {b: a+1 for (a, b) in enumerate(self.vertices())}
+        vertices_dict_reverse = {v: k for (k, v) in vertices_dict.items()}
         s = self.rename_vertices(vertices_dict)
 
         facets = [list(f) for f in s.facets_with_orientation]
 
-        log_file, out_file = f'{TMP_DIR}/BISTELLAR.log', f'{TMP_DIR}/BISTELLAR.out'
+        log_file, out_file, in_file = f'{TMP_DIR}/BISTELLAR.log', f'{TMP_DIR}/BISTELLAR.out', f'{TMP_DIR}/BISTELLAR.in'
 
         try:
             os.remove(log_file)
@@ -226,22 +228,36 @@ class Sphere(sg.SimplicialComplex):
             os.remove(out_file)
         except FileNotFoundError:
             pass
+        try:
+            os.remove(in_file)
+        except FileNotFoundError:
+            pass
 
+        bistellar_path = os.path.join(os.path.dirname(__file__), 'BISTELLAR.gap')
         try:
             status = gap_execute_commands([f'log_file := String("{log_file}");',
                                            f'out_file := String("{out_file}");',
+                                           f'in_file := String("{in_file}");',
                                            f'type_of_object := 1;',
                                            f'facets := {facets};',
-                                           (f'Read("spheres/BISTELLAR_src.gap");', timeout)])
+                                           (f'Read("{bistellar_path}");', timeout)])
         except Exception as e:
             raise e
-        if not status[-1] == ([b'The examined complex is a sphere!!!\ngap> '], 'ok', {}):
+        if not status[-1] == (['The examined complex is a sphere!!!\n'], 'ok', {}):
             raise Exception(f'Gap returned {status[-1]}')
 
         moves = json.load(open(log_file))
+        moves = moves[:-1]  # the last line in log_file is []]
+        for move in moves:
+            for v in move[0] + move[1]:
+                if v not in vertices_dict_reverse:
+                    vertices_dict_reverse[v] = '_gap_' + str(v)
+            move[0] = [vertices_dict_reverse[v] for v in move[0]]
+            move[1] = [vertices_dict_reverse[v] for v in move[1]]
+
         bm = []
-        sphere = s
-        for move in moves[:-1]:
+        sphere = self
+        for move in moves:
             if len(move[1]) == 1:
                 v = move[1][0]
             else:

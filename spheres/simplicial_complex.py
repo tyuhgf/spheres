@@ -1,7 +1,12 @@
+import json
+import os
 import re
 from typing import List, Union, Set, Iterable, Tuple
 
 from sage import all as sg
+
+from settings import TMP_DIR
+from spheres.gap_executor import gap_execute_commands
 
 
 def is_homology_sphere(self: sg.SimplicialComplex):
@@ -92,7 +97,7 @@ class Sphere(sg.SimplicialComplex):
 
         self.facets_with_orientation = self.orient(list(data)[0])
 
-    def rename_vertices(self, subst='int'):
+    def rename_vertices(self, subst: Union[str, dict, callable] = 'int'):
         return super(Sphere, self).rename_vertices(subst).as_sphere()
 
     def is_isomorphic(self, other, certificate=False, with_multiple: bool = False):
@@ -205,9 +210,55 @@ class Sphere(sg.SimplicialComplex):
             return True
         return False
 
-    def path_to_simplex(self):
-        # todo
-        raise NotImplemented
+    def path_to_simplex(self, timeout=3):
+        """Returns list of BistellarMove objects representing the path to trivial sphere."""
+        vertices_dict = {b: a+1 for (a, b) in enumerate(self.vertices())}
+        vertices_dict_reverse = {v: k for (k, v) in vertices_dict.items()}
+        s = self.rename_vertices(vertices_dict)
+
+        facets = [list(f) for f in s.facets_with_orientation]
+
+        log_file, out_file, in_file = f'{TMP_DIR}/BISTELLAR.log', f'{TMP_DIR}/BISTELLAR.out', f'{TMP_DIR}/BISTELLAR.in'
+
+        for f in (log_file, out_file, in_file):
+            try:
+                os.remove(f)
+            except FileNotFoundError:
+                pass
+
+        bistellar_path = os.path.join(os.path.dirname(__file__), 'BISTELLAR.gap')
+        try:
+            status = gap_execute_commands([f'log_file := String("{log_file}");',
+                                           f'out_file := String("{out_file}");',
+                                           f'in_file := String("{in_file}");',
+                                           f'type_of_object := 1;',
+                                           f'facets := {facets};',
+                                           (f'Read("{bistellar_path}");', timeout)])
+        except Exception as e:
+            raise e
+        if not status[-1] == (['The examined complex is a sphere!!!\n'], 'ok', {}):
+            raise Exception(f'Gap returned {status[-1]}')
+
+        moves = json.load(open(log_file))
+        moves = moves[:-1]  # the last line in log_file is []]
+        for move in moves:
+            for v in move[0] + move[1]:
+                if v not in vertices_dict_reverse:
+                    vertices_dict_reverse[v] = '_gap_' + str(v)
+            move[0] = [vertices_dict_reverse[v] for v in move[0]]
+            move[1] = [vertices_dict_reverse[v] for v in move[1]]
+
+        bm = []
+        sphere = self
+        for move in moves:
+            if len(move[1]) == 1:
+                v = move[1][0]
+            else:
+                v = None
+            bm.append(BistellarMove(sphere, move[0], new_vertex_name=v))
+            sphere = bm[-1].t
+
+        return bm
 
 
 Sphere.meta_d = Sphere

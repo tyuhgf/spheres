@@ -43,11 +43,11 @@ def change_orientation(self: Union[sg.Simplex, List]):
         s = s[:-2] + s[-2:][::-1]
     if isinstance(self, sg.Simplex):
         s = sg.Simplex(s)
-        if s.dimension() == 0:
-            if hasattr(self, 'orientation'):
-                s.orientation = self.orientation * -1
-            else:
-                s.orientation = -1
+        # if s.dimension() == 0:
+        #     if hasattr(self, 'orientation'):
+        #         s.orientation = self.orientation * -1
+        #     else:
+        #         s.orientation = -1
     return s
 
 
@@ -64,12 +64,12 @@ def is_isomorphic(self, other, certificate=False):
         return basic_is_isomorphic(self, other, certificate)
 
 
-def decorate_init(base_init):
-    def new_init(self, *args, **kwargs):
-        base_init(self, *args, **kwargs)
-        self.orientation = 1
-
-    return new_init
+# def decorate_init(base_init):
+#     def new_init(self, *args, **kwargs):
+#         base_init(self, *args, **kwargs)
+#         self.orientation = 1
+#
+#     return new_init
 
 
 sg.SimplicialComplex.is_homology_sphere = is_homology_sphere
@@ -78,7 +78,7 @@ sg.SimplicialComplex.as_sphere = as_sphere
 sg.SimplicialComplex.is_isomorphic = is_isomorphic  # that is due to bug in sage
 
 sg.Simplex.change_orientation = change_orientation
-sg.Simplex.__init__ = decorate_init(sg.Simplex.__init__)  # now sg.Simplex has orientation property
+# sg.Simplex.__init__ = decorate_init(sg.Simplex.__init__)  # now sg.Simplex has orientation property
 
 
 class Sphere(sg.SimplicialComplex):

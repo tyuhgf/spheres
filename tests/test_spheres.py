@@ -88,7 +88,7 @@ def test_barycentric():
     s1 = BistellarMove(s0, [1, 2, 6]).t
     s2 = s1.barycentric_subdivision()
     for f in s1.facets_with_orientation:
-        assert s2.check_oriented_facet(sg.Simplex([tuple(sorted(f[:i+1])) for i in range(f.dimension() + 1)]))
+        assert s2.check_oriented_facet(sg.Simplex([tuple(sorted(f[:i+1])) for i in range(len(f))]))
 
 
 if __name__ == '__main__':

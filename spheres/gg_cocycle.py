@@ -6,42 +6,53 @@ from spheres.utils import cochain_monomial_to_list, chains_tensor_product
 ChainElement = sg.CombinatorialFreeModule.Element
 
 
+logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL)
+logger.addHandler(settings.log_handler)
+
+
 class GGCocycleHelper:
     def __init__(self, bistellar_move: BistellarMove):
         self.bistellar_move = bistellar_move
         self.base_sphere = bistellar_move.skew_suspension()
-        self.subdivided_base_sphere = self.base_sphere.barycentric_subdivision()
 
         self.chains0_base = self.base_sphere.n_chains(0, sg.QQ)
         self.chains1_base = self.base_sphere.n_chains(1, sg.QQ)
-
-        self.chains0 = self.subdivided_base_sphere.n_chains(0, sg.QQ)
-        self.chains1 = self.subdivided_base_sphere.n_chains(1, sg.QQ)
+        self.chains2_base = self.base_sphere.n_chains(2, sg.QQ)
+        self.chains3_base = self.base_sphere.n_chains(3, sg.QQ)
+        self.cochains2_base = self.base_sphere.n_chains(2, sg.QQ, cochains=True)
+        self.cochains3_base = self.base_sphere.n_chains(3, sg.QQ, cochains=True)
 
         self.chains11 = chains_tensor_product(self.chains1_base, self.chains1_base)
+
+        self._link_spheres = dict()
+        self._local_dual_chain = dict()
 
         self.eta = self.calc_eta()
         self.ksi = self.calc_ksi()
 
-        # todo: uncomment when fix calc_eta()
-        # self.chain22 = self.cycle_in_chains11_to_product_of_cycles(self.ksi)
-        # self.ggh = self.calc_ggh(self.chain22)
+        self.chain22 = self.cycle_in_chains11_to_product_of_cycles(self.ksi)
+        self.ggh = self.calc_ggh(self.chain22)
 
     def calc_ksi(self):
         ksi = self.chains11.zero()
         for a, q in self.eta:
-            ksi -= a.tensor(a) * q
+            ksi -= a.tensor(a) * q * 2
         for a1, q1 in self.eta:
             for a2, q2 in self.eta:
                 ksi += a1.tensor(a2) * q1 * q2
         return ksi
 
     def calc_ggh(self, chain22):
+        logger.info('start')
+
         result = 0
         for (a, b), c in chain22.monomial_coefficients().items():
-            b_ = self.dualize_cycle(b.boundary())
-            ab = a.to_vector() * b_.to_vector()
-            result += ab * c
+            b_ = self.dualize_cycle(self.chains2_base(b).boundary())
+            ab = self.chains2_base(a).to_vector() * b_.to_vector()
+            result -= ab * c
+
+        logger.info('finish')
         return result
 
     def calc_eta(self):
@@ -78,20 +89,22 @@ class GGCocycleHelper:
         """Weighted average of vertices of the dual cell to a simplex in base_sphere."""
         base_link = self.base_sphere.link_oriented(sim)
         dual_vertices = [tuple(sorted(list(sim) + list(s))) for s in base_link]
-        res = self.base_sphere.n_chains(3, sg.QQ, cochains=True).zero()
+        res = self.cochains3_base.zero()
         for v in dual_vertices:
-            res += self.base_sphere.n_chains(3, sg.QQ, cochains=True)(sg.Simplex(v)) / len(dual_vertices)
+            res += self.cochains3_base(sg.Simplex(v)) / len(dual_vertices)
         return res
 
     def cycle_in_chains11_to_product_of_cycles(self, cycle):
+        logger.info('start')
+
         cycle = self.chains11(cycle)
         if not self.chains11.boundary_0(cycle) == 0 == self.chains11.boundary_1(cycle):
             raise ValueError('Chain is not a (delta0+delta1)-cycle!')
 
-        chains0 = self.base_sphere.n_chains(0, sg.QQ)
-        chains1 = self.base_sphere.n_chains(1, sg.QQ)
-        chains2 = self.base_sphere.n_chains(2, sg.QQ)
-        chains3 = self.base_sphere.n_chains(3, sg.QQ)
+        chains0 = self.chains0_base
+        chains1 = self.chains1_base
+        chains2 = self.chains2_base
+        chains3 = self.chains3_base
         chains22 = chains_tensor_product(chains2, chains2)
         chains12 = chains_tensor_product(chains1, chains2)
         chains03 = chains_tensor_product(chains0, chains3)
@@ -163,66 +176,68 @@ class GGCocycleHelper:
 
         return chain22_
 
-    def cycle_in_chains11_to_product_of_cycles_base(self, cycle):
-        """Inefficient implementation. Todo: delete method when cycle_in_chains11_to_product_of_cycles tested."""
-        cycle = self.chains11(cycle)
-        if not self.chains11.boundary_0(cycle) == 0 == self.chains11.boundary_1(cycle):
-            raise ValueError('Chain is not a (delta0+delta1)-cycle!')
-
-        chains2_base = self.base_sphere.n_chains(2, sg.QQ)
-        chains22 = chains_tensor_product(chains2_base, chains2_base)
-        chains21 = chains_tensor_product(chains2_base, self.chains1_base)
-
-        gens = chains22.gens()
-        matrix = sg.matrix([chains21.boundary_0(chains22.boundary_1(g)).to_vector() for g in gens])
-
-        # that's super-inefficient!
-        res = sg.linear_transformation(matrix).lift(cycle.to_vector())
-        return chains22.from_vector(res)
-
     def dualize_cycle(self, cycle: ChainElement) -> ChainElement:
         """Make a corresponding cycle in barycentric subdivision."""
         res = self.base_sphere.n_chains(2, sg.QQ, cochains=True).zero()
         for (k, q) in cycle.monomial_coefficients().items():
             v1, v2 = k.tuple()
-            b = self.to_dual_vertices(sg.Simplex([v2])) - self.to_dual_vertices(sg.Simplex([v1]))
-            res += self.l2_minimal_chain(b, sphere='dual') * q
+            if (v1, v2) not in self._local_dual_chain.keys():
+                c1 = self.to_dual_vertices(sg.Simplex([v1])) - self.to_dual_vertices(sg.Simplex([v1, v2]))
+                c2 = self.to_dual_vertices(sg.Simplex([v2])) - self.to_dual_vertices(sg.Simplex([v1, v2]))
+                self._local_dual_chain[(v1, v2)] = (self.l2_minimal_chain(c1, local=[v1]) -
+                                                    self.l2_minimal_chain(c2, local=[v2]))
+            res += self._local_dual_chain[(v1, v2)] * q
+            logger.info([v1, v2])
         return res
 
-    def l2_minimal_chain(self, cycle: ChainElement, sphere='base') -> ChainElement:
+    def l2_minimal_chain(self, cycle: ChainElement, local=None) -> ChainElement:
         """Chain with given boundary, minimal by L2 norm."""
-        if sphere == 'base':
-            chains1 = self.base_sphere.n_chains(1, sg.QQ)
-            d1 = sg.matrix([g.boundary().to_vector() for g in chains1.gens()])
+        if local is None or len(local) != 1:
+            raise NotImplemented
 
-            lift = sg.linear_transformation(d1).lift(cycle.to_vector())
-            ker = d1.left_kernel().basis()
+        v = local[0]
+        sim = sg.Simplex([v])
 
-            res, mu = gram_schmidt(ker + [lift])
-            return chains1.from_vector(res[-1])
-        elif sphere == 'dual':
-            chains1 = self.base_sphere.n_chains(2, sg.QQ, cochains=True)
+        if v in self._link_spheres.keys():
+            lk_sphere, chains0, chains1, ker, d1 = self._link_spheres[v]
+        else:
+            lk_sphere = Sphere(self.base_sphere.link_oriented(sim))
+            chains1 = lk_sphere.n_chains(1, sg.QQ, cochains=True)
+            chains0 = lk_sphere.n_chains(2, sg.QQ, cochains=True)
             d1 = []
             for g in chains1.gens():
-                d1.append(self.base_sphere.n_chains(3, sg.QQ, cochains=True).zero())
+                d1.append(chains0.zero())
                 for m in g.coboundary().monomials():
                     m = cochain_monomial_to_list(m)
                     n = cochain_monomial_to_list(g.monomials()[0])
-                    v = list(set(m) - set(n))[0]
-                    coef = (-1)**(m.index(v) + self.base_sphere.check_oriented_facet(m))
-                    d1[-1] += self.base_sphere.n_chains(3, sg.QQ, cochains=True)(sg.Simplex(m)) * coef
+                    w = list(set(m) - set(n))[0]
+                    coef = (-1)**(m.index(w) + lk_sphere.check_oriented_facet(m))
+                    d1[-1] += chains0(sg.Simplex(m)) * coef
                 d1[-1] = d1[-1].to_vector()
-
             d1 = sg.matrix(d1)
-
-            lift = sg.linear_transformation(d1).lift(cycle.to_vector())
             ker = d1.left_kernel().basis()
+            ker, _ = gram_schmidt(ker)
+            self._link_spheres[v] = lk_sphere, chains0, chains1, ker, d1
 
-            res, mu = gram_schmidt(ker + [lift])
-            return chains1.from_vector(res[-1])
+        cycle_in_link = chains0.zero()  # transform chains0 to a (dual) 0-cycle in link of v
+        for (m, c) in cycle.monomial_coefficients().items():
+            m = list(m)
+            # c *= (-1)**self.base_sphere.check_oriented_facet(m)
+            m.remove(v)
+            cycle_in_link += chains0(sg.Simplex(m)) * c
 
-        else:
-            raise ValueError('sphere argument should be \'base\' or \'subdivided\'')
+        lift = sg.linear_transformation(d1).lift(cycle_in_link.to_vector())
+
+        for k in ker:
+            if k:
+                lift -= k * (lift * k) / (k * k)
+        chain_in_link = chains1.from_vector(lift)
+        res = self.cochains2_base.zero()
+        for (m, c) in chain_in_link.monomial_coefficients().items():
+            m = list(m)
+            res += self.cochains2_base(sg.Simplex(m + [v])) * c * (-1) ** sorted(m + [v]).index(v)
+
+        return res
 
     def inverse_boundary(self, cycle: ChainElement) -> ChainElement:
         """Find 2-chain with given boundary."""
@@ -236,4 +251,4 @@ class GGCocycleHelper:
 def gg_cocycle(bistellar_move: BistellarMove):
     """GG-cocycle calculation."""
     ggh = GGCocycleHelper(bistellar_move)
-    return ggh
+    return ggh.ggh

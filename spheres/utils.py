@@ -5,7 +5,7 @@ ChainElement = sg.CombinatorialFreeModule.Element
 
 def cochain_monomial_to_list(m):
     """Turn a SAGE monomial like \\chi_(1, 2, 6) into list [1, 2, 6] of vertices of a simplex."""
-    return list(list(m)[0][0])
+    return sorted(list(list(m)[0][0]))
 
 
 def boundary_n(chain: ChainElement, n: int, g1, g2):
@@ -33,4 +33,3 @@ def chains_tensor_product(a: sg.CombinatorialFreeModule, b: sg.CombinatorialFree
     res.boundary_0 = lambda chain: boundary_n(chain, 0, a, b)
     res.boundary_1 = lambda chain: boundary_n(chain, 1, a, b)
     return res
-

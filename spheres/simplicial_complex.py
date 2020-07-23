@@ -1,7 +1,7 @@
 import json
 import os
 import re
-from typing import List, Union, Set, Iterable, Tuple
+from typing import List, Union, Iterable, Tuple
 
 from sage import all as sg
 
@@ -10,6 +10,8 @@ from spheres.gap_executor import gap_execute_commands
 
 
 def is_homology_sphere(self: sg.SimplicialComplex):
+    if self.dimension() == -1:
+        raise ValueError
     if not self.is_pseudomanifold() or not self.is_connected():
         return False
     h = self.homology()
@@ -20,7 +22,7 @@ def is_homology_sphere(self: sg.SimplicialComplex):
     return True
 
 
-def rename_vertices(self: sg.SimplicialComplex, subst: Union[str, dict, callable] = 'int'):
+def rename_vertices(self: sg.SimplicialComplex, subst: Union[str, dict, callable] = 'int', sphere=False):
     if subst == 'int':
         subst = {v: int(''.join(re.findall(r'\d', str(v)))) for v in self.vertices()}
         names_function = (lambda x: subst[x] if x in subst else x)
@@ -30,7 +32,10 @@ def rename_vertices(self: sg.SimplicialComplex, subst: Union[str, dict, callable
         names_function = subst
     else:
         raise ValueError('Argument subst has unknown type!')
-    return sg.SimplicialComplex([[names_function(v) for v in f] for f in self.facets()])
+    if not sphere:
+        return sg.SimplicialComplex([[names_function(v) for v in f] for f in self.facets()])
+    else:
+        return Sphere([[names_function(v) for v in f] for f in self.facets_with_orientation])
 
 
 def as_sphere(self: sg.SimplicialComplex):
@@ -41,13 +46,6 @@ def change_orientation(self: Union[sg.Simplex, List]):
     s = self.copy() if isinstance(self, list) else list(self)
     if len(s) >= 2:
         s = s[:-2] + s[-2:][::-1]
-    if isinstance(self, sg.Simplex):
-        s = sg.Simplex(s)
-        # if s.dimension() == 0:
-        #     if hasattr(self, 'orientation'):
-        #         s.orientation = self.orientation * -1
-        #     else:
-        #         s.orientation = -1
     return s
 
 
@@ -64,12 +62,13 @@ def is_isomorphic(self, other, certificate=False):
         return basic_is_isomorphic(self, other, certificate)
 
 
-# def decorate_init(base_init):
-#     def new_init(self, *args, **kwargs):
-#         base_init(self, *args, **kwargs)
-#         self.orientation = 1
-#
-#     return new_init
+def decorate_init(base_init):
+    def new_init(self, *args, **kwargs):
+        if len(args) == 1 and isinstance(args[0], list) and all(isinstance(v, int) for v in args[0]):
+            args = (sorted(args[0]), )
+        base_init(self, *args, **kwargs)
+
+    return new_init
 
 
 sg.SimplicialComplex.is_homology_sphere = is_homology_sphere
@@ -77,8 +76,7 @@ sg.SimplicialComplex.rename_vertices = rename_vertices
 sg.SimplicialComplex.as_sphere = as_sphere
 sg.SimplicialComplex.is_isomorphic = is_isomorphic  # that is due to bug in sage
 
-sg.Simplex.change_orientation = change_orientation
-# sg.Simplex.__init__ = decorate_init(sg.Simplex.__init__)  # now sg.Simplex has orientation property
+sg.Simplex.__init__ = decorate_init(sg.Simplex.__init__)  # now sg.Simplex has sorted list of vertices
 
 
 class Sphere(sg.SimplicialComplex):
@@ -98,7 +96,7 @@ class Sphere(sg.SimplicialComplex):
         self.facets_with_orientation = self.orient(list(data)[0])
 
     def rename_vertices(self, subst: Union[str, dict, callable] = 'int'):
-        return super(Sphere, self).rename_vertices(subst).as_sphere()
+        return super(Sphere, self).rename_vertices(subst, sphere=True)
 
     def is_isomorphic(self, other, certificate=False, with_multiple: bool = False):
         res = super(Sphere, self).is_isomorphic(other, certificate=(certificate or with_multiple))
@@ -130,7 +128,7 @@ class Sphere(sg.SimplicialComplex):
     def is_valid(self) -> bool:
         if not self.is_homology_sphere():
             raise ValueError('Complex is not a sphere!')
-        if not set(self.facets_with_orientation) == self.facets():
+        if not set(sg.Simplex(f) for f in self.facets_with_orientation) == self.facets():
             raise ValueError('Facets not equals to calculated facets_with_orientation!')
         for e in self.flip_graph().edges():
             v1 = list(set(e[0]) - set(e[1]))
@@ -139,19 +137,20 @@ class Sphere(sg.SimplicialComplex):
                 raise ValueError
             v1 = v1[0]
             v2 = v2[0]
-            e0_oriented = [f for f in self.facets_with_orientation if f == sg.Simplex(e[0])][0]
+            e0_oriented = [f for f in self.facets_with_orientation if set(f) == set(e[0])][0]
             neg = [v if v != v1 else v2 for v in e0_oriented]
             pos = change_orientation(neg)
-            if not self.check_oriented_facet(sg.Simplex(pos)):
+            if not self.check_oriented_facet(pos):
                 raise ValueError('Not a valid orientation!')
         return True
 
-    def orient(self, oriented_facet) -> List[sg.Simplex]:
+    def orient(self, oriented_facet) -> List[List]:
         """Create list of oriented facets by BFS starting from oriented_facet."""
-        if not isinstance(oriented_facet, sg.Simplex):
-            oriented_facet = sg.Simplex(oriented_facet)
+        if isinstance(oriented_facet, sg.Simplex):
+            oriented_facet = list(oriented_facet)
+        oriented_facet_sim = sg.Simplex(oriented_facet)
         g = self.flip_graph()
-        edges = list(g.breadth_first_search(oriented_facet, edges=True))
+        edges = list(g.breadth_first_search(oriented_facet_sim, edges=True))
         oriented_facets = [oriented_facet]
         for e in edges:
             v1 = list(set(e[0]) - set(e[1]))
@@ -160,27 +159,27 @@ class Sphere(sg.SimplicialComplex):
                 raise ValueError
             v1 = v1[0]
             v2 = v2[0]
-            e0_oriented = [f for f in oriented_facets if f == sg.Simplex(e[0])][0]
+            e0_oriented = [f for f in oriented_facets if set(f) == set(e[0])][0]
             neg = [v if v != v1 else v2 for v in e0_oriented]
             pos = change_orientation(neg)
-            oriented_facets.append(sg.Simplex(pos))
+            oriented_facets.append(pos)
         return oriented_facets
 
     def d(self):
         return Chain(Sphere, [(1, Sphere(self.link_oriented([i]))) for i in self.vertices()])
 
-    def link_oriented(self, v: Union[sg.Simplex, List]) -> Set[sg.Simplex]:
+    def link_oriented(self, v: Union[sg.Simplex, List]) -> List[List]:
         """:return: set of simplices s of link(self, v) with orientation such that s+v is oriented simplex of self"""
         facets = list(self.link(v).facets())
         if not isinstance(v, list):
             v = list(v)
-        res = set()
+        res = list()
         for s in facets:
             s = list(s)
-            if self.check_oriented_facet(sg.Simplex(s + v)):
-                res.add(sg.Simplex(s))
+            if self.check_oriented_facet(s + v):
+                res.append(s)
             else:
-                res.add(sg.Simplex(s).change_orientation())
+                res.append(change_orientation(s))
         return res
 
     def barycentric_subdivision(self):
@@ -199,12 +198,10 @@ class Sphere(sg.SimplicialComplex):
         return Sphere(facets)
 
     def check_oriented_facet(self, f: Union[List, sg.Simplex]) -> bool:
-        if not isinstance(f, sg.Simplex):
-            f = sg.Simplex(f)
-        q = [s for s in self.facets_with_orientation if sg.Simplex(s) == f]
+        q = [s for s in self.facets_with_orientation if set(s) == set(f)]
         if not len(q) == 1:
             raise ValueError('Not a facet!')
-        d = {v: i + 1 for (i, v) in enumerate(list(f))}
+        d = {v: i + 1 for (i, v) in enumerate(f)}
         perm = [d[v] for v in list(q[0])]
         if sg.Permutation(perm).is_even():
             return True
@@ -266,7 +263,7 @@ Sphere.meta_d = Sphere
 
 class BistellarMove(sg.SimplicialComplex):
     def __init__(self, sphere: Sphere, sigma: List, new_vertex_name=None):
-        s = sphere.__copy__().as_sphere().facets_with_orientation
+        s = sphere.facets_with_orientation
         super(BistellarMove, self).__init__(s)
 
         if new_vertex_name is None:
@@ -289,17 +286,17 @@ class BistellarMove(sg.SimplicialComplex):
 
         self.add_face(v)
 
-        t = set(s).copy()
+        t = s.copy()
         sim = sg.SimplicialComplex([v])
         sim.remove_face(v)
-        facet = [facet for facet in s if facet in sim.facets()][0]
+        facet = [facet for facet in s if sg.Simplex(facet) in sim.facets()][0]
         sim = sim.as_sphere().orient(oriented_facet=facet)
 
         for facet in sim:
-            if facet in t:
-                t.remove(facet)
+            if set(facet) in [set(f) for f in t]:
+                t.remove([f for f in t if set(f) == set(facet)][0])
             else:
-                t.update({facet.change_orientation()})
+                t.append(change_orientation(facet))
 
         self.s = Sphere(s)
         self.t = Sphere(t)
@@ -328,8 +325,8 @@ class BistellarMove(sg.SimplicialComplex):
         new_vertex_name = self.sigma[0] if len(self.sigma) == 1 else None
         return BistellarMove(self.t, self.tau, new_vertex_name=new_vertex_name)
 
-    def link(self, simplex, is_mutable=True):
-        if not set(simplex).issubset(set(self.sigma)):
+    def link(self, simplex, is_mutable=False):
+        if not set(simplex).issubset(set(self.sigma + self.tau)):
             raise ValueError('Invalid simplex for link of bistellar move.')
         res = self.s.link_oriented(simplex)
         sigma = list(set(self.sigma) - set(simplex))

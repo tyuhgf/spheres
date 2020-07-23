@@ -1,6 +1,8 @@
 from sage import all as sg
-from spheres.simplicial_complex import Sphere, BistellarMove
+
+from settings import log_handler
 from spheres.gg_cocycle import GGCocycleHelper, chains_tensor_product
+from spheres.simplicial_complex import Sphere, BistellarMove
 
 log_handler.setLevel(100)
 

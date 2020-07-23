@@ -1,6 +1,10 @@
+import logging
+
+from sage import all as sg
 from sage.modules.misc import gram_schmidt
 
-from spheres.simplicial_complex import *
+import settings
+from spheres.simplicial_complex import Sphere, BistellarMove
 from spheres.utils import cochain_monomial_to_list, chains_tensor_product
 
 ChainElement = sg.CombinatorialFreeModule.Element

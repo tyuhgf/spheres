@@ -1,3 +1,4 @@
+import pytest
 from sage import all as sg
 
 from settings import log_handler
@@ -7,6 +8,7 @@ from spheres.simplicial_complex import Sphere, BistellarMove
 log_handler.setLevel(100)
 
 
+@pytest.mark.gap
 def test_to_dual_vertices():
     s = Sphere([[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]]).join(sg.SimplicialComplex([[6], [7]])).as_sphere()
     s = s.rename_vertices()
@@ -21,6 +23,7 @@ def test_to_dual_vertices():
     print(q)
 
 
+@pytest.mark.gap
 def test_chains11_to_products():
     s = Sphere([[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]]).join(sg.SimplicialComplex([[6], [7]])).as_sphere()
     s = s.rename_vertices()
@@ -47,6 +50,7 @@ def test_chains11_to_products():
     assert q11 == c11
 
 
+# @pytest.mark.gap
 # def test_l2_minimal_chain():
 #     s = Sphere([[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]]).join(sg.SimplicialComplex([[6], [7]])).as_sphere()
 #     s = s.rename_vertices()
@@ -66,6 +70,7 @@ def test_chains11_to_products():
 #     print('\n', q, '\n', q.to_vector().norm())
 
 
+# @pytest.mark.gap
 # def test_dualize_cycle():
 #     s = Sphere([[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]]).join(sg.SimplicialComplex([[6], [7]])).as_sphere()
 #     s = s.rename_vertices()
@@ -83,6 +88,7 @@ def test_chains11_to_products():
 #     print('\n', q)
 
 
+@pytest.mark.gap
 def test_calc_eta():
     s = Sphere([[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]]).join(sg.SimplicialComplex([[6], [7]])).as_sphere()
     s = s.rename_vertices()
@@ -95,6 +101,7 @@ def test_calc_eta():
     assert ggh.chains11.boundary_0(ksi) == 0 == ggh.chains11.boundary_1(ksi)
 
 
+@pytest.mark.gap
 def test_gg_cocycle():
     s = Sphere([[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]]).join(sg.SimplicialComplex([[6], [7]])).as_sphere()
     s0 = s.rename_vertices()
@@ -116,6 +123,7 @@ def test_gg_cocycle():
     assert res == sg.Rational(1) / 210
 
 
+@pytest.mark.gap
 def test_cp2():
     f = [[int(d) for d in str(n)] for n in
          [1243, 1237, 1276, 2354, 2376, 3476, 3465, 4576, 2385, 2368,
@@ -137,6 +145,7 @@ def test_cp2():
     assert sum(res) == sg.Rational(1)/3
 
 
+@pytest.mark.gap
 def test_ggh_rename():
     s = Sphere([[1, 4, 8], [1, 3, 4], [1, 8, 6], [4, 6, 8],
                 [1, 6, 2], [6, 4, 3], [1, 2, 3], [3, 2, 6]])
@@ -150,6 +159,7 @@ def test_ggh_rename():
     assert ggh1.ggh == ggh_r.ggh
 
 
+@pytest.mark.gap
 def test_ggh_inverse():
     s = Sphere([[1, 4, 8], [1, 3, 4], [1, 8, 6], [4, 6, 8],
                 [1, 6, 2], [6, 4, 3], [1, 2, 3], [3, 2, 6]])
@@ -168,3 +178,5 @@ if __name__ == '__main__':
     # test_dualize_cycle()
     test_calc_eta()
     test_cp2()
+    test_ggh_rename()
+    test_ggh_inverse()

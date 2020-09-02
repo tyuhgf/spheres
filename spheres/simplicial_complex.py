@@ -267,7 +267,7 @@ class BistellarMove(sg.SimplicialComplex):
         super(BistellarMove, self).__init__(s)
 
         if new_vertex_name is None:
-            new_vertex_name = max([i for i in self.vertices() if isinstance(i, int)]) + 1
+            new_vertex_name = max([0] + [i for i in self.vertices() if isinstance(i, int)]) + 1
 
         self.dim = self.dimension()  # dimension of a sphere
         self.sigma = sigma

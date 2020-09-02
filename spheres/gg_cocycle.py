@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures.process import ProcessPoolExecutor
 
 from sage import all as sg
 from sage.modules.misc import gram_schmidt
@@ -55,7 +56,6 @@ class GGCocycleHelper:
             b_ = self.dualize_cycle(self.chains2_base(b).boundary())
             ab = self.chains2_base(a).to_vector() * b_.to_vector()
             result -= ab * c
-
         logger.info('finish')
         return result
 
@@ -256,3 +256,22 @@ def gg_cocycle(bistellar_move: BistellarMove):
     """GG-cocycle calculation."""
     ggh = GGCocycleHelper(bistellar_move)
     return ggh.ggh
+
+
+def gg(sphere, max_workers=1, path_to_simplex_timeout=20):
+    moves = sphere.path_to_simplex(timeout=path_to_simplex_timeout)
+    logger.info(f'n_moves: {len(moves)}')
+    logger.info([len(move.vertices()) for move in moves])
+    res = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        for move in moves:
+            if len(move.sigma) > 1:
+                for v in move.sigma:
+                    ggh = executor.submit(GGCocycleHelper, move.link([v]))
+                    res.append(ggh)
+            if len(move.tau) > 1:
+                for v in move.tau:
+                    ggh = executor.submit(GGCocycleHelper, move.link([v]))
+                    res.append(ggh)
+
+    return sum(ggh.result().ggh for ggh in res)

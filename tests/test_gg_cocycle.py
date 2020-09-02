@@ -162,9 +162,9 @@ def test_ggh_inverse():
 
 
 if __name__ == '__main__':
-    # test_to_dual_vertices()
-    # test_chains11_to_products()
+    test_to_dual_vertices()
+    test_chains11_to_products()
     # test_l2_minimal_chain()
     # test_dualize_cycle()
-    # test_calc_eta()
+    test_calc_eta()
     test_cp2()

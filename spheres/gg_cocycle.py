@@ -259,12 +259,16 @@ def gg_cocycle(bistellar_move: BistellarMove):
 
 
 def gg(sphere, max_workers=1, path_to_simplex_timeout=20):
+    if sphere.is_minus_self():
+        return 0
     moves = sphere.path_to_simplex(timeout=path_to_simplex_timeout)
     logger.info(f'n_moves: {len(moves)}')
     logger.info([len(move.vertices()) for move in moves])
     res = []
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         for move in moves:
+            if move.s.is_minus_self():
+                break
             if len(move.sigma) > 1:
                 for v in move.sigma:
                     ggh = executor.submit(GGCocycleHelper, move.link([v]))

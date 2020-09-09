@@ -22,9 +22,12 @@ def is_homology_sphere(self: sg.SimplicialComplex):
     return True
 
 
-def rename_vertices(self: sg.SimplicialComplex, subst: Union[str, dict, callable] = 'int', sphere=False):
+def rename_vertices(self: sg.SimplicialComplex, subst: Union[str, dict, callable] = 'random', sphere=False):
     if subst == 'int':
         subst = {v: int(''.join(re.findall(r'\d', str(v)))) for v in self.vertices()}
+        names_function = (lambda x: subst[x] if x in subst else x)
+    elif subst == 'random':
+        subst = {v: i for (i, v) in enumerate(self.vertices())}
         names_function = (lambda x: subst[x] if x in subst else x)
     elif isinstance(subst, dict):
         names_function = (lambda x: subst[x] if x in subst else x)
@@ -32,6 +35,7 @@ def rename_vertices(self: sg.SimplicialComplex, subst: Union[str, dict, callable
         names_function = subst
     else:
         raise ValueError('Argument subst has unknown type!')
+
     if not sphere:
         return sg.SimplicialComplex([[names_function(v) for v in f] for f in self.facets()])
     else:
@@ -95,7 +99,7 @@ class Sphere(sg.SimplicialComplex):
 
         self.facets_with_orientation = self.orient(list(data)[0])
 
-    def rename_vertices(self, subst: Union[str, dict, callable] = 'int'):
+    def rename_vertices(self, subst: Union[str, dict, callable] = 'random'):
         return super(Sphere, self).rename_vertices(subst, sphere=True)
 
     def is_isomorphic(self, other, certificate=False, with_multiple: bool = False):
@@ -302,13 +306,13 @@ class BistellarMove(sg.SimplicialComplex):
         self.t = Sphere(t)
 
     def is_isomorphic(self, other, certificate=False):
-        c_self = self.s.cone()\
-            .rename_vertices({'R0': '__new_vertex__'})\
+        c_self = self.s.cone() \
+            .rename_vertices({'R0': '__new_vertex__'}) \
             .rename_vertices({'L' + str(v): v for v in self.vertices()})
         r_self = sg.SimplicialComplex(self.facets() + c_self.facets())
 
-        c_other = other.s.cone()\
-            .rename_vertices({'R0': '__new_vertex__'})\
+        c_other = other.s.cone() \
+            .rename_vertices({'R0': '__new_vertex__'}) \
             .rename_vertices({'L' + str(v): v for v in other.vertices()})
         r_other = sg.SimplicialComplex(other.facets() + c_other.facets())
 

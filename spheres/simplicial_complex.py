@@ -12,7 +12,8 @@ from spheres.gap_executor import gap_execute_commands
 def is_homology_sphere(self: sg.SimplicialComplex):
     if self.dimension() == -1:
         raise ValueError
-    if not self.is_pseudomanifold() or not self.is_connected():
+    if not sg.SimplicialComplex.rename_vertices(self).is_pseudomanifold() \
+            or not self.is_connected():  # needs rename_vertices() due to some bug is sage.is_pseudomanifold()
         return False
     h = self.homology()
     if not all([h[i].order() == 1 for i in range(1, self.dimension())]):
@@ -22,7 +23,8 @@ def is_homology_sphere(self: sg.SimplicialComplex):
     return True
 
 
-def rename_vertices(self: sg.SimplicialComplex, subst: Union[str, dict, callable] = 'random', sphere=False):
+def rename_vertices(self: sg.SimplicialComplex, subst: Union[str, dict, callable] = 'random',
+                    sphere=False, return_dict=False):
     if subst == 'int':
         subst = {v: int(''.join(re.findall(r'\d', str(v)))) for v in self.vertices()}
         names_function = (lambda x: subst[x] if x in subst else x)
@@ -36,10 +38,16 @@ def rename_vertices(self: sg.SimplicialComplex, subst: Union[str, dict, callable
     else:
         raise ValueError('Argument subst has unknown type!')
 
+    names_dict = {v: names_function(v) for v in self.vertices()}
+
     if not sphere:
-        return sg.SimplicialComplex([[names_function(v) for v in f] for f in self.facets()])
+        result = sg.SimplicialComplex([[names_dict[v] for v in f] for f in self.facets()])
     else:
-        return Sphere([[names_function(v) for v in f] for f in self.facets_with_orientation])
+        result = Sphere([[names_dict[v] for v in f] for f in self.facets_with_orientation])
+    if return_dict:
+        return result, names_dict
+    else:
+        return result
 
 
 def as_sphere(self: sg.SimplicialComplex):

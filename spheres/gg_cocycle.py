@@ -258,24 +258,28 @@ def gg_cocycle(bistellar_move: BistellarMove):
     return ggh.ggh
 
 
-def gg(sphere, max_workers=1, path_to_simplex_timeout=20):
+def gg(sphere, max_workers=1, moves=None, path_to_simplex_timeout=20, result=None):
     if sphere.is_minus_self():
         return 0
-    moves = sphere.path_to_simplex(timeout=path_to_simplex_timeout)
+    if moves is None:
+        moves = sphere.path_to_simplex(timeout=path_to_simplex_timeout)
     logger.info(f'n_moves: {len(moves)}')
     logger.info([len(move.vertices()) for move in moves])
     res = []
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        for move in moves:
+        for i, move in enumerate(moves):
             if move.s.is_minus_self():
                 break
             if len(move.sigma) > 1:
                 for v in move.sigma:
-                    ggh = executor.submit(GGCocycleHelper, move.link([v]))
-                    res.append(ggh)
+                    ggh = executor.submit(gg_cocycle, move.link([v]))
+                    res.append((i, v, ggh))
             if len(move.tau) > 1:
                 for v in move.tau:
-                    ggh = executor.submit(GGCocycleHelper, move.link([v]))
-                    res.append(ggh)
+                    ggh = executor.submit(gg_cocycle, move.link([v]))
+                    res.append((i, v, ggh))
 
-    return sum(ggh.result().ggh for ggh in res)
+    res = [(m, v, g.result()) for (m, v, g) in res]
+    if result == 'all':
+        return res
+    return sum(ggh[2] for ggh in res)

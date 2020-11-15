@@ -11,7 +11,7 @@ log_handler.setLevel(100)
 @pytest.mark.gap
 def test_to_dual_vertices():
     s = Sphere([[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]]).join(sg.SimplicialComplex([[6], [7]])).as_sphere()
-    s = s.rename_vertices()
+    s = s.rename_vertices('int')
     s = BistellarMove(s, [1, 2, 6]).t
     bm = BistellarMove(s, [2, 6])
 
@@ -26,7 +26,7 @@ def test_to_dual_vertices():
 @pytest.mark.gap
 def test_chains11_to_products():
     s = Sphere([[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]]).join(sg.SimplicialComplex([[6], [7]])).as_sphere()
-    s = s.rename_vertices()
+    s = s.rename_vertices('int')
     bm = BistellarMove(s, [1, 2, 6])
 
     ggh = GGCocycleHelper(bm)
@@ -91,7 +91,7 @@ def test_chains11_to_products():
 @pytest.mark.gap
 def test_calc_eta():
     s = Sphere([[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]]).join(sg.SimplicialComplex([[6], [7]])).as_sphere()
-    s = s.rename_vertices()
+    s = s.rename_vertices('int')
     s = BistellarMove(s, [2, 3, 7]).t
     bm = BistellarMove(s, [3, 4, 6])
 
@@ -104,10 +104,10 @@ def test_calc_eta():
 @pytest.mark.gap
 def test_gg_cocycle():
     s = Sphere([[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]]).join(sg.SimplicialComplex([[6], [7]])).as_sphere()
-    s0 = s.rename_vertices()
+    s0 = s.rename_vertices('int')
     bm0 = BistellarMove(s0, [2, 3, 7])  # 8
     s1 = bm0.t
-    bm1 = BistellarMove(s1, [4, 5, 7])  # 8
+    bm1 = BistellarMove(s1, [4, 5, 7])  # 9
     s2 = bm1.t
     bm2 = BistellarMove(s2, [8])
     s3 = bm2.t
@@ -172,11 +172,12 @@ def test_ggh_inverse():
 
 
 if __name__ == '__main__':
-    test_to_dual_vertices()
-    test_chains11_to_products()
+    # test_to_dual_vertices()
+    # test_chains11_to_products()
     # test_l2_minimal_chain()
     # test_dualize_cycle()
-    test_calc_eta()
-    test_cp2()
-    test_ggh_rename()
-    test_ggh_inverse()
+    # test_calc_eta()
+    # test_cp2()
+    # test_ggh_rename()
+    # test_ggh_inverse()
+    test_gg_cocycle()

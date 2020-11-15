@@ -1,4 +1,5 @@
 import os
+
 import pytest
 import sage.all as sg
 
@@ -58,7 +59,7 @@ def test_bistellar(timeout, result):
 @pytest.mark.parametrize('s, timeout', [
     (BistellarMove(Sphere([[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]])
                    .join(sg.SimplicialComplex([[6], [7]]))
-                   .as_sphere().rename_vertices(), [1, 2, 6]).t, 3)
+                   .as_sphere().rename_vertices('int'), [1, 2, 6]).t, 3)
 ])
 def test_path_to_simplex(s, timeout):
     if gap_path is None:
@@ -69,3 +70,7 @@ def test_path_to_simplex(s, timeout):
         assert q[-1].t.is_isomorphic(Sphere(sg.Simplex(s.dimension() + 1).faces()))
     else:
         assert s.is_isomorphic(Sphere(sg.Simplex(s.dimension() + 1).faces()))[0]
+
+
+if __name__ == '__main__':
+    test_bistellar(3, 'timeout')

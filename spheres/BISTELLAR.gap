@@ -105,6 +105,7 @@ verbose:=9;        # <--- 0 = no comments
 
 ### fix random sequence ###
 
+MakeReadWriteGlobal("R_N");
 R_N:=1;   # <--- 1,2,3,4,... different but fixed random sequences 
           #                  are used for distinct integers,
           #                  allowing you to reproduce any 
@@ -112,6 +113,7 @@ R_N:=1;   # <--- 1,2,3,4,... different but fixed random sequences
           #
 ###########
 
+MakeReadWriteGlobal("R_X");
 R_X:=[66318732,86395905,22233618,21989103,237245480,264566285,240037038,
       264902875,9274660,180361945,94688010,24032135,106293216,27264613,
       126456102,243761907,80312412,2522186,59575208,70682510,228947516,

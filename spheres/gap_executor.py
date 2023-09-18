@@ -53,7 +53,7 @@ class Communicator:
         for _ in range(int(timeout // self._step + 1)):
             await asyncio.sleep(self._step)
             if self.listener is not None and self.listener.complete:
-                res = self.answers[n_answers:].split('gap> ')
+                res = self.answers[n_answers:].split('\x1b[1m\x1b[34mgap> \x1b[0m\x1b[31m')  # gap prompt string
                 if res[-1] == '':
                     res = res[:-1]
                 return res, 'ok', {}
